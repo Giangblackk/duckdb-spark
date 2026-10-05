@@ -3,8 +3,10 @@
 #include "duckdb/common/enum_util.hpp"
 #include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/common/helper.hpp"
+#include "duckdb/main/attached_database.hpp"
 #include "duckdb/storage/database_size.hpp"
 #include "spark_client.hpp"
+#include "spark_options.hpp"
 #include "spark_schema_entry.hpp"
 #include "spark_schema_set.hpp"
 #include "spark_utils.hpp"
@@ -81,5 +83,10 @@ DatabaseSize SparkCatalog::GetDatabaseSize(ClientContext &context) {
 	throw BinderException("Spark does not support getting database size");
 }
 
+bool SparkCatalog::HasConflictingAttachOptions(const string &path, const AttachOptions &options) {
+	// Currently there is no way to identify conflicts in attach options from `ATTACH OR REPLACE` command for Spark
+	// Catalog. Just to be sure the Spark catalog is updated, this function always return true for conflict.
+	return true;
+}
 } // namespace spark
 } // namespace duckdb

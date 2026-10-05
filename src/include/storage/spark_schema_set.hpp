@@ -25,7 +25,6 @@ private: // methods
 
 private:
 	bool populated_entire_set = false;
-	bool called_load_entries = false;
 };
 } // namespace spark
 } // namespace duckdb

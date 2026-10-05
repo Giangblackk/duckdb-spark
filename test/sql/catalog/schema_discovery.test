@@ -4,11 +4,13 @@
 
 require spark
 
+require-env SPARK_HOST
+
 # Set up: attach a single Spark catalog alias used throughout this file.
 # Assumes Spark exposes at least a schema called 'default'.
 
 statement ok
-ATTACH 'sc://docker.orb.internal:15002' AS sc (TYPE spark, CATALOG 'nessie');
+ATTACH 'sc://${SPARK_HOST}:15002' AS sc (TYPE spark, CATALOG 'nessie');
 
 # ---------------------------------------------------------------------------
 # SHOW DATABASES – shows schema-level objects under the attached catalog

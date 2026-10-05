@@ -4,18 +4,20 @@
 
 require spark
 
+require-env SPARK_HOST
+
 # ---------------------------------------------------------------------------
 # Extension must be loaded for the TYPE spark storage to be recognized
 # ---------------------------------------------------------------------------
 
 # --- Basic ATTACH fails when Spark is unreachable on a dummy endpoint -------
 statement error
-ATTACH 'sc://127.0.0.1:15003' AS bad_sc (TYPE spark);
+ATTACH 'sc://${SPARK_HOST}:15003' AS bad_sc (TYPE spark);
 ----
 
 # --- ATTACH to a reachable Spark endpoint -----------------------------------
 statement ok
-ATTACH 'sc://docker.orb.internal:15002' AS sc (TYPE spark);
+ATTACH 'sc://${SPARK_HOST}:15002' AS sc (TYPE spark);
 
 # After attach the catalog name must appear in duckdb_databases()
 query I
@@ -43,6 +45,27 @@ ATTACH OR REPLACE 'sc://docker.orb.internal:15002' AS sc (TYPE spark);
 
 query I
 SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc';
+----
+1
+
+# ---------------------------------------------------------------------------
+# ATTACH OR REPLACE – change the CATALOG attach options will update the catalog
+# ---------------------------------------------------------------------------
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc' and schema_name = 'default';
+----
+1
+
+statement ok
+ATTACH OR REPLACE 'sc://docker.orb.internal:15002' AS sc (TYPE spark, CATALOG 'nessie');
+
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc' and schema_name = 'default';
+----
+0
+
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc' and schema_name = 'tpch';
 ----
 1
 

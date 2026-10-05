@@ -69,9 +69,6 @@ std::vector<CreateSchemaInfo> SparkSchemaSet::ParseRecordBatches(arrow::RecordBa
 }
 
 void SparkSchemaSet::LoadEntries(DatabaseInstance &db) {
-	if (called_load_entries) {
-		return;
-	}
 	auto &spark_catalog = catalog.Cast<SparkCatalog>();
 	auto spark_client = spark_catalog.spark_client;
 	auto plan = spark_client->PlanListDatabases("*");
@@ -81,7 +78,6 @@ void SparkSchemaSet::LoadEntries(DatabaseInstance &db) {
 		auto schema_entry = make_uniq<SparkSchemaEntry>(catalog, schema_info);
 		CreateEntry(std::move(schema_entry));
 	}
-	called_load_entries = true;
 }
 
 optional_ptr<CatalogEntry> SparkCatalogSet::CreateEntry(unique_ptr<CatalogEntry> entry) {
@@ -91,6 +87,12 @@ optional_ptr<CatalogEntry> SparkCatalogSet::CreateEntry(unique_ptr<CatalogEntry>
 	}
 	entries.insert(make_pair(result->name, std::move(entry)));
 	return result;
+}
+
+void SparkCatalogSet::ClearEntries() {
+	lock_guard<mutex> lock(entry_lock);
+	entries.clear();
+	is_loaded = false;
 }
 
 } // namespace spark

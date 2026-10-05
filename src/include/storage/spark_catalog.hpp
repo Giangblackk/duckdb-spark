@@ -44,6 +44,8 @@ public:
 		return db_path;
 	};
 
+	//! Whether attaching a catalog with the given path and attach options would be considered a conflict
+	bool HasConflictingAttachOptions(const string &path, const AttachOptions &options) override;
 public:
 	SparkConfig config;
 	SparkAttachOptions options;
