@@ -1,6 +1,6 @@
-# name: test/sql/storage/schema_discovery.test
+# name: test/sql/catalog/schema_discovery.test
 # description: List and inspect schemas in an attached Spark catalog
-# group: [storage]
+# group: [catalog]
 
 require spark
 

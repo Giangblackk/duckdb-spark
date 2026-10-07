@@ -1,6 +1,6 @@
-# name: test/sql/storage/attach.test
+# name: test/sql/catalog/attach.test
 # description: ATTACH/DETACH lifecycle, option variants and error paths for the Spark catalog
-# group: [storage]
+# group: [catalog]
 
 require spark
 
