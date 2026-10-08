@@ -1,0 +1,51 @@
+services:
+  spark:
+    container_name: spark-connect
+    image: spark_nessie:latest
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=changethispassword
+      - AWS_REGION=us-east-1
+    ports:
+      - "15002:15002"
+      - "4040:4040"
+    init: true
+  minio:
+    image: rustfs/rustfs:1.0.1
+    container_name: minio
+    environment:
+      - RUSTFS_ACCESS_KEY=admin
+      - RUSTFS_SECRET_KEY=changethispassword
+    ports:
+      - 9001:9001
+      - 9000:9000
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.96.0
+    container_name: nessie
+    ports:
+      - 19120:19120
+    environment:
+      - nessie.version.store.type=ROCKSDB
+      - nessie.version.store.persist.rocks.database-path=/tmp/nessie-rocksdb-store
+      - nessie.server.authentication.enabled=false
+      # Object store settings.
+      # This example uses MinIO as the object store.
+      - nessie.catalog.default-warehouse=warehouse
+      - nessie.catalog.warehouses.warehouse.location=s3://warehouse
+      - nessie.catalog.service.s3.default-options.region=us-east-1
+      - nessie.catalog.service.s3.default-options.path-style-access=true
+      - nessie.catalog.service.s3.default-options.access-key=urn:nessie-secret:quarkus:nessie.catalog.secrets.access-key
+      - nessie.catalog.secrets.access-key.name=admin
+      - nessie.catalog.secrets.access-key.secret=changethispassword
+      # MinIO endpoint for Nessie server
+      - nessie.catalog.service.s3.default-options.endpoint=http://minio:9000
+  dremio:
+    platform: linux/x86_64
+    image: dremio/dremio-oss:latest
+    ports:
+      - 9047:9047
+      - 31010:31010
+      - 32010:32010
+    container_name: dremio
+    environment:
+      - DREMIO_JAVA_SERVER_EXTRA_OPTS=-Dpaths.dist=file:///opt/dremio/data/dist
