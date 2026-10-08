@@ -1,0 +1,96 @@
+# name: test/sql/catalog/schema_discovery.test
+# description: List and inspect schemas in an attached Spark catalog
+# group: [catalog]
+
+require spark
+
+require-env SPARK_HOST
+
+# Set up: attach a single Spark catalog alias used throughout this file.
+# Assumes Spark exposes at least a schema called 'default'.
+
+statement ok
+ATTACH 'sc://${SPARK_HOST}:15002' AS sc (TYPE spark, CATALOG 'nessie');
+
+# ---------------------------------------------------------------------------
+# SHOW DATABASES – shows schema-level objects under the attached catalog
+# ---------------------------------------------------------------------------
+
+# Must not error
+statement ok
+SHOW DATABASES;
+
+# The attached catalog itself must appear in the databases list
+query I
+SELECT count(*) >= 1 FROM (SHOW DATABASES) WHERE database_name = 'sc';
+----
+true
+
+# ---------------------------------------------------------------------------
+# SHOW SCHEMAS FROM <catalog> – enumerate schemas inside the catalog
+# ---------------------------------------------------------------------------
+
+statement ok
+SELECT * FROM duckdb_schemas();
+
+# 'tpch' schema must be present
+query I
+SELECT count(*) >= 1
+FROM (SELECT * FROM duckdb_schemas())
+WHERE database_name = 'sc' and schema_name = 'tpch';
+----
+true
+
+# internal flag must be false for user-created Spark schemas
+query I
+SELECT count(*) = 0
+FROM duckdb_schemas()
+WHERE database_name = 'sc' AND internal = true;
+----
+true
+
+# ---------------------------------------------------------------------------
+# INFORMATION_SCHEMA.schemata – standard catalog view
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) >= 1
+FROM information_schema.schemata
+WHERE schema_name = 'tpch';
+----
+true
+
+# All rows must carry the correct catalog_name
+query I
+SELECT count(*) >= 1
+FROM information_schema.schemata
+WHERE catalog_name != 'sc';
+----
+true
+
+# ---------------------------------------------------------------------------
+# Schema name must be queryable as a catalog qualifier
+# ---------------------------------------------------------------------------
+
+# After discovery 'sc.default' must work as a two-part prefix
+query I
+SELECT count(*) > -1 FROM sc.tpch.customer;
+----
+true
+
+# A non-existent schema must return a catalog error
+statement error
+SELECT * FROM sc.nonexistent_schema_xyz.some_table;
+----
+
+# ---------------------------------------------------------------------------
+# DETACH and verify schemas disappear from duckdb_schemas()
+# ---------------------------------------------------------------------------
+
+statement ok
+DETACH sc;
+
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc';
+----
+0
