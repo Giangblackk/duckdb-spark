@@ -2,7 +2,9 @@
 
 #include "duckdb/catalog/catalog.hpp"
 #include "duckdb/catalog/catalog_transaction.hpp"
+#include "duckdb/common/enums/on_create_conflict.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/exception/catalog_exception.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "spark_table_set.hpp"
@@ -45,18 +47,35 @@ optional_ptr<CatalogEntry> SparkSchemaEntry::CreateFunction(CatalogTransaction t
 };
 optional_ptr<CatalogEntry> SparkSchemaEntry::CreateTable(CatalogTransaction transaction, BoundCreateTableInfo &info) {
 	auto &base_info = info.base->Cast<CreateTableInfo>();
-	if (base_info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
-		DropInfo drop_info;
-		drop_info.catalog = base_info.catalog;
-		drop_info.name = base_info.table;
-		drop_info.type = CatalogType::TABLE_ENTRY;
-		drop_info.cascade = false;
-		drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
-		DropEntry(transaction.GetContext(), drop_info);
-	}
 	if (base_info.on_conflict == OnCreateConflict::ALTER_ON_CONFLICT) {
+		// short-circuit for not implemented case
 		throw NotImplementedException("ALTER ON CONFLICT in CreateTable is not implemented for Spark");
 	}
+	// lookup for table info
+	EntryLookupInfo lookup_info(CatalogType::TABLE_ENTRY, base_info.table);
+	auto existing_entry = tables.GetEntry(transaction.GetContext(), lookup_info);
+
+	if (existing_entry) {
+		if (base_info.on_conflict == OnCreateConflict::ERROR_ON_CONFLICT) {
+			// CREATE TABLE: if the table already exists, throw error
+			throw CatalogException("table `%s.%s.%s` already existed.", base_info.catalog, base_info.schema,
+			                       base_info.table);
+		} else if (base_info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
+			// CREATE TABLE IF NOT EXISTS: if the table already exists, simply return the existing entry
+			return existing_entry;
+		} else if (base_info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+			// CREATE OR REPLACE TABLE: if the table already exists, drop table first
+			DropInfo drop_info;
+			drop_info.catalog = base_info.catalog;
+			drop_info.schema = base_info.schema;
+			drop_info.name = base_info.table;
+			drop_info.type = CatalogType::TABLE_ENTRY;
+			drop_info.cascade = false;
+			drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
+			DropEntry(transaction.GetContext(), drop_info);
+		}
+	}
+	// after all, create table
 	return tables.CreateTable(transaction.GetContext(), info);
 };
 optional_ptr<CatalogEntry> SparkSchemaEntry::CreateView(CatalogTransaction transaction, CreateViewInfo &info) {

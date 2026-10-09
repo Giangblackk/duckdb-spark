@@ -1,9 +1,13 @@
 #include "storage/spark_catalog.hpp"
 
+#include "duckdb/catalog/catalog_entry.hpp"
 #include "duckdb/common/enum_util.hpp"
+#include "duckdb/common/enums/on_create_conflict.hpp"
 #include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/main/attached_database.hpp"
+#include "duckdb/parser/parsed_data/create_schema_info.hpp"
+#include "duckdb/parser/parsed_data/drop_info.hpp"
 #include "duckdb/storage/database_size.hpp"
 #include "spark_client.hpp"
 #include "spark_options.hpp"
@@ -34,6 +38,32 @@ void SparkCatalog::Initialize(bool load_builtin) {
 }
 
 optional_ptr<CatalogEntry> SparkCatalog::CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) {
+	// short-circuit for not implemented cases
+	if (info.on_conflict == OnCreateConflict::ALTER_ON_CONFLICT) {
+		throw NotImplementedException("ALTER ON CONFLICT in CreateSchema is not implemented for Spark");
+	} else if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+		throw NotImplementedException("REPLACE ON CONFLICT in CreateSchema is not supported by Spark");
+	}
+	EntryLookupInfo lookup_info(CatalogType::SCHEMA_ENTRY, info.schema);
+	auto existing_entry = LookupSchema(transaction, lookup_info, OnEntryNotFound::RETURN_NULL);
+	if (existing_entry) {
+		if (info.on_conflict == OnCreateConflict::ERROR_ON_CONFLICT) {
+			// CREATE SCHEMA: if the schema already exists, throw error
+			throw CatalogException("schema `%s.%s` already existed.", info.catalog, info.schema);
+		} else if (info.on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT) {
+			// CREATE SCHEMA IF NOT EXISTS: if the schema already exists, simply return the existing entry
+			return existing_entry->Cast<CatalogEntry>();
+		} else if (info.on_conflict == OnCreateConflict::REPLACE_ON_CONFLICT) {
+			// CREATE OR REPLACE TABLE: if the schema already exists, drop schema first.
+			// The drop will fail if the schema exists and is NOT EMPTY.
+			DropInfo drop_info;
+			drop_info.catalog = info.catalog;
+			drop_info.name = info.schema;
+			drop_info.type = CatalogType::SCHEMA_ENTRY;
+			drop_info.if_not_found = OnEntryNotFound::RETURN_NULL;
+			DropSchema(transaction.GetContext(), drop_info);
+		}
+	}
 	return schemas.CreateSchema(transaction.GetContext(), info);
 }
 
