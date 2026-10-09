@@ -1,21 +1,21 @@
-# DuckDB - Spark Extension
-## Introduction
-DuckDB extension to connect to Spark via Spark Connect API - so DuckDB can tap into the ecosystem of Spark.
+# DuckDB Spark Extension
 
-The vision of this project is creating hybrid data processing systems, combine the strength of both distributed computing (scalable) and local computing (blazing fast).
+## Introduction
+
+`duckdb-spark` is a DuckDB extension that enables DuckDB to connect to Apache Spark via the [Spark Connect API](https://spark.apache.org/docs/latest/spark-connect-overview.html), allowing DuckDB to leverage the broader Spark ecosystem.
+
+The vision of this project is to enable hybrid data processing systems that combine the strengths of distributed computing (scalability) with local computing (performance).
 
 ## Overall Design
 
 ### Overview
 
-The `duckdb-spark`
-extension stand between DuckDB and Spark Connect Driver, allow DuckDB to utilized resources of scalable distributed Spark clusters and connect to broad range of data systems (Cloudera, Databricks, etc) and lakehouse (Apache Iceberg, Delta Lake, Apache Hudi, Apache Paimon, etc) to explore, analyze data without caring much about underlying details of storage or table format.
+The `duckdb-spark` extension acts as a bridge between DuckDB and the Spark Connect Driver, enabling DuckDB to utilize the resources of scalable, distributed Spark clusters. It connects to a broad range of data systems (Cloudera, Databricks, etc.) and open lakehouses (Apache Iceberg, Delta Lake, Apache Hudi, Apache Paimon, etc.), allowing users to explore and analyze data without needing to manage the underlying storage or table format details.
 
-The reasons why this project works are:
+This project is made possible by two key foundations:
 
-1. Spark Connect API, built on 2 amazing language-agnostic technologies: gRPC and Apache Arrow in-memory columnar data format
-2. DuckDB integration with Apache Arrow: zero-copy data access and conversion from DuckDB data format to Arrow RecordBatch
-
+1. **Spark Connect API** — built on two language-agnostic technologies: [gRPC](https://grpc.io/) and [Apache Arrow](https://arrow.apache.org/) in-memory columnar data format.
+2. **DuckDB's Apache Arrow integration** — enables zero-copy data access and conversion between DuckDB's internal format and Arrow `RecordBatch`.
 
 ```mermaid
 flowchart TD
@@ -28,7 +28,7 @@ duckdb(DuckDB)
 duckdb --> duckdb_ext -- gRPC + Arrow --> spark_connect --> spark_cluster
 ```
 
-### The read path
+### Read Path
 
 ```mermaid
 flowchart TD
@@ -43,7 +43,7 @@ catalog -- get tables metadata --> spark_connect
 storage -- read tables as DataFrame --> spark_connect -- send table data as Arrow batches via gRPC --> duckdb_ext -- read data as arrow table --> duckdb
 ```
 
-### The write path
+### Write Path
 
 ```mermaid
 flowchart TD
@@ -59,4 +59,5 @@ spark_connect -- update table metadata --> catalog
 ```
 
 ## Documentation
+
 - [Extension Docs](./docs/README.md)
