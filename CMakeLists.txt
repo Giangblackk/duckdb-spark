@@ -25,6 +25,7 @@ set(EXTENSION_SOURCES
     src/spark_client.cpp
     src/spark_storage.cpp
     src/spark_utils.cpp
+    src/spark_execute_query.cpp
     src/spark_list_catalogs.cpp
     src/spark_list_databases.cpp
     src/spark_list_tables.cpp

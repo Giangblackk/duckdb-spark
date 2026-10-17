@@ -6,6 +6,7 @@
 #include "duckdb/common/vector_operations/unary_executor.hpp"
 #include "duckdb/execution/expression_executor_state.hpp"
 #include "duckdb/main/config.hpp"
+#include "spark_execute_query.hpp"
 #include "spark_list_catalogs.hpp"
 #include "spark_list_databases.hpp"
 #include "spark_list_tables.hpp"
@@ -62,8 +63,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	spark::SparkListTablesFunction spark_list_tables_function;
 	loader.RegisterFunction(spark_list_tables_function);
+
 	spark::SparkScanTableFunction spark_scan_table_function;
 	loader.RegisterFunction(spark_scan_table_function);
+
+	spark::SparkExecuteQueryFunction spark_query_function;
+	loader.RegisterFunction(spark_query_function);
 
 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
 	config.storage_extensions["spark"] = make_uniq<spark::SparkStorageExtension>();

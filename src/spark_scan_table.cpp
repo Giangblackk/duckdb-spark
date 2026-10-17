@@ -14,7 +14,6 @@
 #include "duckdb/planner/expression.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/table_filter.hpp"
-#include "spark/connect/base.pb.h"
 #include "spark/connect/expressions.pb.h"
 #include "spark/connect/relations.pb.h"
 #include "spark_arrow_reader.hpp"
@@ -47,8 +46,10 @@ void SparkScanTableFunction::SparkScanTableExecute(ClientContext &context, Table
 	                                                             local_state.chunk_offset);
 	output.SetCardinality(output_size);
 	if (output_size > 0) {
+		bool arrow_scan_is_projected =
+		    !local_state.column_ids.empty() && local_state.column_ids.size() < bind_data.names.size();
 		ArrowTableFunction::ArrowToDuckDB(local_state, bind_data.arrow_table.GetColumns(), output, 0,
-		                                  COLUMN_IDENTIFIER_ROW_ID);
+		                                  arrow_scan_is_projected, COLUMN_IDENTIFIER_ROW_ID);
 	}
 	output.Verify();
 	local_state.chunk_offset += output.size();

@@ -108,7 +108,7 @@ void WriteRecordBatchToDataChunk(ClientContext &context, const std::shared_ptr<a
 	ArrowScanLocalState fake_local_state(std::move(current_chunk), context);
 
 	// Write data to output DataChunk
-	ArrowTableFunction::ArrowToDuckDB(fake_local_state, arrow_table.GetColumns(), output, 0, false, false);
+	ArrowTableFunction::ArrowToDuckDB(fake_local_state, arrow_table.GetColumns(), output, 0, true);
 
 	// Verify output
 	output.Verify();
