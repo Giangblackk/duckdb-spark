@@ -1,5 +1,6 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/main/config.hpp"
+#include "spark_execute_command.hpp"
 #include "spark_execute_query.hpp"
 #include "spark_scan_table.hpp"
 #include "spark_storage.hpp"
@@ -21,6 +22,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	spark::SparkExecuteQueryFunction spark_query_function;
 	loader.RegisterFunction(spark_query_function);
+
+	spark::SparkExecuteCommandFunction spark_command_function;
+	loader.RegisterFunction(spark_command_function);
 
 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
 	config.storage_extensions["spark"] = make_uniq<spark::SparkStorageExtension>();

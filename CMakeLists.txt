@@ -26,6 +26,7 @@ set(EXTENSION_SOURCES
     src/spark_storage.cpp
     src/spark_utils.cpp
     src/spark_execute_query.cpp
+    src/spark_execute_command.cpp
     src/spark_scan_table.cpp
     src/spark_arrow_reader.cpp
     src/storage/spark_catalog.cpp
