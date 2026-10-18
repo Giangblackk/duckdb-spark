@@ -94,7 +94,7 @@ static unique_ptr<FunctionData> SparkExecuteCommandBind(ClientContext &context, 
 }
 
 SparkExecuteCommandFunction::SparkExecuteCommandFunction()
-    : TableFunction("spark_execute_command", {LogicalType::VARCHAR, LogicalType::VARCHAR}, SparkExecuteCommandFunc,
+    : TableFunction("spark_command", {LogicalType::VARCHAR, LogicalType::VARCHAR}, SparkExecuteCommandFunc,
                     SparkExecuteCommandBind, SparkExecuteCommandInitGlobalState) {};
 } // namespace spark
 } // namespace duckdb

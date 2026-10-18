@@ -1,5 +1,6 @@
 #include "spark_execute_query.hpp"
 
+#include "duckdb/common/exception/binder_exception.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
@@ -10,6 +11,7 @@
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database_manager.hpp"
+#include "duckdb/parser/parser.hpp"
 #include "spark_catalog.hpp"
 #include "spark_client.hpp"
 
@@ -127,8 +129,37 @@ unique_ptr<FunctionData> SparkExecuteQueryFunction::SparkExecuteQueryBind(Client
 		// Add Spark gRPC client to table function data
 		unique_ptr<SparkExecuteQueryBindData> bind_data = make_uniq<SparkExecuteQueryBindData>(sparkClient, sql_query);
 
+		// parsing sql_query to validate it's valid query for execution
+		Parser parser;
+		parser.ParseQuery(sql_query);
+		if (parser.statements.size() == 0) {
+			throw BinderException("There is no statement in the input SQL query");
+		}
+		if (parser.statements.size() != 1) {
+			throw BinderException("SQL query of multiple statements are currently not supported");
+		}
+		auto &stmt = parser.statements[0];
+		switch (stmt->type) { // StatementType enum
+		case StatementType::SELECT_STATEMENT:
+			break;
+		default:
+			throw BinderException("This function does not support SQL statements of type `%s`. Please switch to use "
+			                      "`spark_command` for more versatile SQL commands.",
+			                      StatementTypeToString(stmt->type));
+			break;
+		}
+
 		// get arrow schema from analyzing plan, export and populate shema to attributes
 		auto arrow_shema = bind_data->spark_client->AnalyzePlanToArrowSchema(bind_data->execute_query_plan);
+
+		// avoid edge case of empty output schema
+		if (arrow_shema->num_fields() == 0) {
+			throw BinderException(
+			    "Empty output schema. If you are executing Spark SQL commands which return empty output. "
+			    "Please switch to use `spark_command` for more versatile SQL commands.");
+		}
+
+		//  export schema from C++ to C
 		auto status = arrow::ExportSchema(*std::move(arrow_shema), &bind_data->schema_root.arrow_schema);
 		if (!status.ok()) {
 			throw BinderException("Arrow schema export failed: " + status.ToString());
