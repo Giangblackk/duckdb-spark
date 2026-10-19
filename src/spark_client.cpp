@@ -532,6 +532,49 @@ grpc::Status SparkGRPCClient::GetStatus(::spark::connect::Plan &plan) {
 	grpc::Status status = stream->Finish();
 	return status;
 }
+std::tuple<grpc::Status, unique_ptr<::spark::connect::Relation>>
+SparkGRPCClient::GetSQLCommandResultRelation(::spark::connect::Plan &plan) {
+	::spark::connect::ExecutePlanRequest request;
+	auto operation_id = generate_uuid();
+	request.set_session_id(session_id);
+	request.set_operation_id(operation_id);
+	request.set_client_type("duckdb");
+	request.mutable_plan()->CopyFrom(plan);
+
+	// setup UserContext
+	::spark::connect::UserContext uc;
+	uc.set_user_name("duckdb");
+	request.mutable_user_context()->CopyFrom(uc);
+
+	// execute plan
+	grpc::ClientContext context;
+	auto stream = stub_->ExecutePlan(&context, request);
+	::spark::connect::ExecutePlanResponse msg;
+	// iterate over response messages
+	unique_ptr<::spark::connect::Relation> output_relation = nullptr;
+	while (stream->Read(&msg)) {
+		auto response_type = msg.response_type_case();
+		// if message is Arrow BatchRecord, parse it
+		if (response_type == ::spark::connect::ExecutePlanResponse::kSqlCommandResult) {
+			output_relation = make_uniq<::spark::connect::Relation>(msg.sql_command_result().relation());
+		}
+	}
+	// get status
+	grpc::Status status = stream->Finish();
+	return {status, std::move(output_relation)};
+}
+
+::spark::connect::Relation SparkGRPCClient::ShowString(::spark::connect::Relation &input_relation) {
+	::spark::connect::Relation rel;
+	rel.mutable_show_string()->mutable_input()->CopyFrom(input_relation);
+	rel.mutable_show_string()->set_num_rows(20);
+	rel.mutable_show_string()->set_truncate(0);
+	rel.mutable_show_string()->set_vertical(false);
+	auto rc = rel.mutable_common();
+	rc->set_plan_id(next_plan_id++);
+	rc->set_source_info("");
+	return rel;
+}
 
 shared_ptr<SparkGRPCClient> SparkGRPCClient::GetOrCreateSparkClient(ClientContext &context,
                                                                     const std::string &endpoint) {

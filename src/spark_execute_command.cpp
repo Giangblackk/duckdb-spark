@@ -4,6 +4,7 @@
 #include "spark_catalog.hpp"
 #include "spark_client.hpp"
 
+#include <arrow/array/array_binary.h>
 namespace duckdb {
 namespace spark {
 
@@ -38,8 +39,10 @@ static void SparkExecuteCommandFunc(ClientContext &context, TableFunctionInput &
 	// lock for exclusivity in get next from stream/batches
 	std::lock_guard<mutex> guard(global_state.lock);
 
-	auto status = spark_client->GetStatus(bind_data.execute_command_plan);
+	auto [status, sql_cmd_relation] = spark_client->GetSQLCommandResultRelation(bind_data.execute_command_plan);
+
 	output.SetCardinality(1);
+
 	if (!status.ok()) {
 		// status = FAILED
 		FlatVector::GetData<string_t>(output.data[0])[0] = StringVector::AddString(output.data[0], "FAILED");
@@ -49,8 +52,25 @@ static void SparkExecuteCommandFunc(ClientContext &context, TableFunctionInput &
 	} else {
 		// status = SUCCEED
 		FlatVector::GetData<string_t>(output.data[0])[0] = StringVector::AddString(output.data[0], "SUCCEED");
-		// message = NULL
-		FlatVector::SetNull(output.data[1], 0, true);
+		// collect relation output of sql command
+		if (!sql_cmd_relation) {
+			// message = NULL
+			FlatVector::SetNull(output.data[1], 0, true);
+		}
+		auto sql_cmd_string_relation = spark_client->ShowString(*sql_cmd_relation);
+		auto sql_cmd_string_plan = spark_client->PlanFromRelation(sql_cmd_string_relation);
+		auto batches = spark_client->GetRecordBatches(sql_cmd_string_plan);
+		auto first_batch = batches[0];
+		auto first_col = first_batch->column(0);
+		auto first_array = std::static_pointer_cast<arrow::StringArray>(first_col);
+		if (first_array->IsNull(0)) {
+			// message = NULL
+			FlatVector::SetNull(output.data[1], 0, true);
+		} else {
+			auto value = first_array->GetString(0);
+			// message = relation.show()
+			FlatVector::GetData<string_t>(output.data[1])[0] = StringVector::AddString(output.data[1], value);
+		}
 	}
 	global_state.done = true;
 }

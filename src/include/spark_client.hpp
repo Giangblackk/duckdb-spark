@@ -2,6 +2,7 @@
 
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/types.hpp"
+#include "duckdb/common/unique_ptr.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_context_state.hpp"
 #include "spark/connect/base.grpc.pb.h"
@@ -24,6 +25,7 @@
 #include <grpcpp/support/sync_stream.h>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace duckdb {
@@ -69,6 +71,12 @@ public:
 	IterateSparkSteamState(const std::shared_ptr<SparkStreamState> &state);
 
 	grpc::Status GetStatus(::spark::connect::Plan &plan);
+
+	std::tuple<grpc::Status, unique_ptr<::spark::connect::Relation>>
+	GetSQLCommandResultRelation(::spark::connect::Plan &plan);
+
+	::spark::connect::Relation ShowString(::spark::connect::Relation &input_relation);
+
 	std::vector<ColumnInfo> AnalyzePlanToColumnInfo(::spark::connect::Plan &plan);
 	std::shared_ptr<arrow::Schema> AnalyzePlanToArrowSchema(::spark::connect::Plan &plan);
 	~SparkGRPCClient() {};
