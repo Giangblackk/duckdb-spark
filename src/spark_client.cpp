@@ -240,6 +240,32 @@ grpc::Status SparkGRPCClient::SetConfigs(const std::map<std::string, std::string
 	return rel;
 }
 
+::spark::connect::Relation SparkGRPCClient::AddLimit(::spark::connect::Relation &input_relation, int32_t limit) {
+	::spark::connect::Relation rel;
+	auto limiter = rel.mutable_limit();
+	limiter->mutable_input()->CopyFrom(input_relation);
+	limiter->set_limit(limit);
+
+	auto rc = rel.mutable_common();
+	rc->set_plan_id(next_plan_id++);
+	rc->set_source_info("");
+
+	return rel;
+}
+
+::spark::connect::Relation SparkGRPCClient::AddOffset(::spark::connect::Relation &input_relation, int32_t offset) {
+	::spark::connect::Relation rel;
+	auto offseter = rel.mutable_offset();
+	offseter->mutable_input()->CopyFrom(input_relation);
+	offseter->set_offset(offset);
+
+	auto rc = rel.mutable_common();
+	rc->set_plan_id(next_plan_id++);
+	rc->set_source_info("");
+
+	return rel;
+}
+
 ::spark::connect::Plan SparkGRPCClient::PlanExecuteSQLQuery(const std::string &sql_string) {
 	::spark::connect::SQL sql_query;
 	sql_query.set_query(sql_string);

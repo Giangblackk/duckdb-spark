@@ -36,6 +36,8 @@ struct SparkScanTableBindData : public ArrowScanFunctionData {
 	ScanTableParams params;
 	vector<string> names;
 	vector<unique_ptr<::spark::connect::Expression>> filter_expressions;
+	int32_t limit = -1;
+	int32_t offset = 0;
 };
 
 struct SparkScanTableGlobalState : public ArrowScanGlobalState {
