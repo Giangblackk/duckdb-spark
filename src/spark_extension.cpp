@@ -1,7 +1,9 @@
 #include "duckdb/common/helper.hpp"
 #include "duckdb/main/config.hpp"
+#include "duckdb/optimizer/optimizer_extension.hpp"
 #include "spark_execute_command.hpp"
 #include "spark_execute_query.hpp"
+#include "spark_optimizer.hpp"
 #include "spark_scan_table.hpp"
 #include "spark_storage.hpp"
 #define DUCKDB_EXTENSION_MAIN
@@ -28,6 +30,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	auto &config = DBConfig::GetConfig(loader.GetDatabaseInstance());
 	config.storage_extensions["spark"] = make_uniq<spark::SparkStorageExtension>();
+
+	OptimizerExtension optimizer_extension;
+
+	optimizer_extension.optimize_function = OptimizeSparkPlan;
+
+	config.optimizer_extensions.push_back(std::move(optimizer_extension));
 }
 
 void SparkExtension::Load(ExtensionLoader &loader) {

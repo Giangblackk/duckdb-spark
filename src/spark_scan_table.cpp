@@ -98,6 +98,16 @@ unique_ptr<GlobalTableFunctionState> SparkScanTableFunction::SparkScanTableInitG
 		// otherwise, only add projection
 		projection_pushdown_rel = spark_client->AddColumnProjection(read_table_rel, selected_fields);
 	}
+
+	// Add offset and limit if pushed down, in specific order (order matter here): OFFSET THEN LIMIT
+	if (bind_data.offset > 0) {
+		projection_pushdown_rel = spark_client->AddOffset(projection_pushdown_rel, bind_data.offset);
+	}
+
+	if (bind_data.limit > 0) {
+		projection_pushdown_rel = spark_client->AddLimit(projection_pushdown_rel, bind_data.limit);
+	}
+
 	auto scan_table_plan = spark_client->PlanFromRelation(projection_pushdown_rel);
 
 	auto gstate = make_uniq<SparkScanTableGlobalState>();
