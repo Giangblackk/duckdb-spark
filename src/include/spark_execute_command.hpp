@@ -3,9 +3,9 @@
 #include "duckdb/function/table_function.hpp"
 namespace duckdb {
 namespace spark {
-class SparkListDatabasesFunction : public TableFunction {
+class SparkExecuteCommandFunction : public TableFunction {
 public:
-	SparkListDatabasesFunction();
+	SparkExecuteCommandFunction();
 };
 } // namespace spark
 } // namespace duckdb

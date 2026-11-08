@@ -1,0 +1,11 @@
+services:
+  sail:
+    container_name: sail
+    image: sail:latest
+    ports:
+      - "50051:50051"
+    command:
+      - "spark"
+      - "server"
+      - "--ip"
+      - "0.0.0.0"

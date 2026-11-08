@@ -1,0 +1,8 @@
+services:
+  sedona:
+    container_name: spark-sedona
+    image: spark_sedona:latest
+    ports:
+      - "15002:15002"
+      - "4040:4040"
+    init: true

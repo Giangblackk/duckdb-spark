@@ -1,0 +1,197 @@
+# name: test/sql/catalog/table_discovery.test
+# description: List and inspect tables in an attached Spark catalog
+# group: [catalog]
+
+require spark
+
+require-env SPARK_HOST
+
+# Assumes the Spark instance has at least:
+#   schema 'default' with tables 'employees' and 'orders'
+
+statement ok
+ATTACH 'sc://${SPARK_HOST}:15002' AS sc (TYPE spark, CATALOG 'nessie');
+
+# ---------------------------------------------------------------------------
+# SHOW TABLES – list tables in the current schema context
+# ---------------------------------------------------------------------------
+
+# Scoped to the Spark catalog schema
+statement ok
+SHOW TABLES FROM sc.tpch;
+
+# 'customer' must be in the list
+query I
+SELECT count(*) >= 1 FROM (SHOW TABLES FROM sc.tpch) WHERE name = 'customer';
+----
+true
+
+# ---------------------------------------------------------------------------
+# SHOW ALL TABLES – shows tables across all schemas
+# ---------------------------------------------------------------------------
+
+statement ok
+SHOW ALL TABLES;
+
+# The employees table in sc.tpch must appear
+query I
+SELECT count(*) >= 1
+FROM (SHOW ALL TABLES)
+WHERE database = 'sc' AND schema = 'tpch' AND name = 'customer';
+----
+true
+
+# ---------------------------------------------------------------------------
+# INFORMATION_SCHEMA.tables – standard view
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) >= 1
+FROM information_schema.tables
+WHERE table_schema = 'tpch' AND table_name = 'customer';
+----
+true
+
+# table_catalog must equal the alias we used
+query I
+SELECT count(*) = 0
+FROM information_schema.tables
+WHERE table_catalog != 'sc';
+----
+true
+
+# table_type must be BASE TABLE (not VIEW)
+query I
+SELECT count(*) >= 1
+FROM information_schema.tables
+WHERE table_schema = 'tpch'
+  AND table_name   = 'customer'
+  AND table_type   = 'BASE TABLE';
+----
+true
+
+# ---------------------------------------------------------------------------
+# INFORMATION_SCHEMA.columns – column-level metadata
+# ---------------------------------------------------------------------------
+
+# The 'employees' table must expose at least an 'id' column
+query I
+SELECT count(*) >= 1
+FROM information_schema.columns
+WHERE table_schema  = 'tpch'
+  AND table_name    = 'customer'
+  AND column_name   = 'c_custkey';
+----
+true
+
+# Column ordinal positions must be positive integers
+query I
+SELECT count(*) = 0
+FROM information_schema.columns
+WHERE table_schema = 'tpch'
+  AND table_name   = 'customer'
+  AND ordinal_position <= 0;
+----
+true
+
+# ---------------------------------------------------------------------------
+# duckdb_tables() – DuckDB built-in introspection
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) >= 1
+FROM duckdb_tables()
+WHERE database_name = 'sc' AND schema_name = 'tpch' AND table_name = 'customer';
+----
+true
+
+# internal flag must be false for user tables
+query I
+SELECT count(*) = 0
+FROM duckdb_tables()
+WHERE database_name = 'sc' AND internal = true;
+----
+true
+
+# ---------------------------------------------------------------------------
+# duckdb_columns() – column-level introspection
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) >= 1
+FROM duckdb_columns()
+WHERE database_name = 'sc'
+  AND schema_name   = 'tpch'
+  AND table_name    = 'customer'
+  AND column_name   = 'c_custkey';
+----
+true
+
+# All columns must have a non-empty data_type
+query I
+SELECT count(*) = 0
+FROM duckdb_columns()
+WHERE database_name = 'sc'
+  AND schema_name   = 'tpch'
+  AND table_name    = 'customer'
+  AND (data_type IS NULL OR data_type = '');
+----
+true
+
+# ---------------------------------------------------------------------------
+# DESCRIBE table – returns column name and type rows
+# ---------------------------------------------------------------------------
+
+statement ok
+DESCRIBE sc.tpch.customer;
+
+# DESCRIBE must return at least one row for each known column
+query I
+SELECT count(*) >= 1 FROM (DESCRIBE sc.tpch.customer) WHERE column_name = 'c_custkey';
+----
+true
+
+query I
+SELECT count(*) >= 1 FROM (DESCRIBE sc.tpch.customer) WHERE column_name = 'c_name';
+----
+true
+
+# ---------------------------------------------------------------------------
+# PRAGMA table_info – alternative column inspection
+# ---------------------------------------------------------------------------
+
+statement ok
+PRAGMA table_info('sc.tpch.customer');
+
+# ---------------------------------------------------------------------------
+# Non-existent table must produce a catalog error
+# ---------------------------------------------------------------------------
+
+statement error
+DESCRIBE sc.default.nonexistent_table_xyz;
+----
+
+# ---------------------------------------------------------------------------
+# Tables reachable via three-part qualified name
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) > -1 FROM sc.tpch.customer;
+----
+true
+
+# ---------------------------------------------------------------------------
+# After DETACH tables must no longer be accessible
+# ---------------------------------------------------------------------------
+
+statement ok
+DETACH sc;
+
+query I
+SELECT count(*) FROM duckdb_tables() WHERE database_name = 'sc';
+----
+0
+
+statement error
+SELECT * FROM sc.tpch.customer;
+----

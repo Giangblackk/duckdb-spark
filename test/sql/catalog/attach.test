@@ -1,0 +1,168 @@
+# name: test/sql/catalog/attach.test
+# description: ATTACH/DETACH lifecycle, option variants and error paths for the Spark catalog
+# group: [catalog]
+
+require spark
+
+require-env SPARK_HOST
+
+# ---------------------------------------------------------------------------
+# Extension must be loaded for the TYPE spark storage to be recognized
+# ---------------------------------------------------------------------------
+
+# --- Basic ATTACH fails when Spark is unreachable on a dummy endpoint -------
+statement error
+ATTACH 'sc://${SPARK_HOST}:15003' AS bad_sc (TYPE spark);
+----
+
+# --- ATTACH to a reachable Spark endpoint -----------------------------------
+statement ok
+ATTACH 'sc://${SPARK_HOST}:15002' AS sc (TYPE spark);
+
+# After attach the catalog name must appear in duckdb_databases()
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc';
+----
+1
+
+# The catalog type reported must be 'spark'
+query I
+SELECT type FROM duckdb_databases() WHERE database_name = 'sc';
+----
+spark
+
+# The path must reflect the connection string
+query I
+SELECT path FROM duckdb_databases() WHERE database_name = 'sc';
+----
+sc://docker.orb.internal:15002
+
+# ---------------------------------------------------------------------------
+# ATTACH OR REPLACE – replaces an existing alias without error
+# ---------------------------------------------------------------------------
+statement ok
+ATTACH OR REPLACE 'sc://docker.orb.internal:15002' AS sc (TYPE spark);
+
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc';
+----
+1
+
+# ---------------------------------------------------------------------------
+# ATTACH OR REPLACE – change the CATALOG attach options will update the catalog
+# ---------------------------------------------------------------------------
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc' and schema_name = 'default';
+----
+1
+
+statement ok
+ATTACH OR REPLACE 'sc://docker.orb.internal:15002' AS sc (TYPE spark, CATALOG 'nessie');
+
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc' and schema_name = 'default';
+----
+0
+
+query I
+SELECT count(*) FROM duckdb_schemas() WHERE database_name = 'sc' and schema_name = 'tpch';
+----
+1
+
+# ---------------------------------------------------------------------------
+# ATTACH with explicit CATALOG option (non-default Spark catalog name)
+# ---------------------------------------------------------------------------
+statement ok
+ATTACH 'sc://docker.orb.internal:15002' AS sc_nessie (TYPE spark, CATALOG 'nessie');
+
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc_nessie';
+----
+1
+
+# ---------------------------------------------------------------------------
+# Attaching the same alias twice without OR REPLACE must error
+# ---------------------------------------------------------------------------
+statement error
+ATTACH 'sc://docker.orb.internal:15002' AS sc (TYPE spark);
+----
+
+# ---------------------------------------------------------------------------
+# ATTACH IF NOT EXISTS – must silently skip if alias already exists
+# ---------------------------------------------------------------------------
+statement ok
+ATTACH IF NOT EXISTS 'sc://docker.orb.internal:15002' AS sc (TYPE spark);
+
+# Catalog count must still be 1 (no duplicate created)
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc';
+----
+1
+
+# ---------------------------------------------------------------------------
+# DETACH – removes the catalog alias
+# ---------------------------------------------------------------------------
+statement ok
+DETACH sc_nessie;
+
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc_nessie';
+----
+0
+
+# ---------------------------------------------------------------------------
+# Detaching a non-existent alias must error
+# ---------------------------------------------------------------------------
+statement error
+DETACH sc_nessie;
+----
+
+# ---------------------------------------------------------------------------
+# DETACH IF EXISTS – silently skips if alias does not exist
+# ---------------------------------------------------------------------------
+statement ok
+DETACH DATABASE IF EXISTS sc_nessie;
+
+# ---------------------------------------------------------------------------
+# ATTACH with READ_ONLY access mode
+# ---------------------------------------------------------------------------
+statement ok
+ATTACH 'sc://docker.orb.internal:15002' AS sc_ro (TYPE spark, READ_ONLY);
+
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc_ro';
+----
+1
+
+statement ok
+DETACH sc_ro;
+
+# ---------------------------------------------------------------------------
+# Re-attach to the main alias after all previous operations
+# ---------------------------------------------------------------------------
+statement ok
+ATTACH OR REPLACE 'sc://docker.orb.internal:15002' AS sc (TYPE spark, CATALOG 'nessie');
+
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc';
+----
+1
+
+# ---------------------------------------------------------------------------
+# The attached catalog must be usable immediately for schema-qualified reads
+# ---------------------------------------------------------------------------
+query I
+SELECT count(*) > -1 FROM sc.tpch.customer;
+----
+true
+
+# ---------------------------------------------------------------------------
+# DETACH while queries are not running must succeed
+# ---------------------------------------------------------------------------
+statement ok
+DETACH sc;
+
+query I
+SELECT count(*) FROM duckdb_databases() WHERE database_name = 'sc';
+----
+0
