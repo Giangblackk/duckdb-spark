@@ -1,0 +1,252 @@
+# name: test/sql/catalog/table_ddl.test
+# description: CREATE TABLE, CREATE TABLE AS SELECT, DROP TABLE via an attached Spark catalog
+# group: [catalog]
+
+require spark
+
+require-env SPARK_HOST
+
+# Assumes the Spark instance exposes schema 'sample'.
+# Tests create and drop throwaway tables; names are chosen to avoid collisions
+# with permanent fixtures like 'employees'.
+
+statement ok
+ATTACH 'sc://${SPARK_HOST}:15002' AS sc (TYPE spark, CATALOG 'nessie');
+
+# ---------------------------------------------------------------------------
+# Cleanup: ensure leftover tables from a previous failed run do not block us
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE SCHEMA IF NOT EXISTS sc.sample;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_basic;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_types;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_ctas;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_not_null;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_replace;
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE – basic column types
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE sc.sample.test_ddl_basic (
+    id      INTEGER,
+    name    VARCHAR,
+    score   DOUBLE,
+    active  BOOLEAN
+);
+
+# The new table must be visible in catalog introspection
+query I
+SELECT count(*) FROM duckdb_tables()
+WHERE database_name = 'sc'
+  AND schema_name   = 'sample'
+  AND table_name    = 'test_ddl_basic';
+----
+1
+
+# Must be queryable (no rows yet, but no error)
+query I
+SELECT count(*) FROM sc.sample.test_ddl_basic;
+----
+0
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE – wider set of supported column types
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE sc.sample.test_ddl_types (
+    col_int       INTEGER,
+    col_bigint    BIGINT,
+    col_smallint  SMALLINT,
+    col_tinyint   TINYINT,
+    col_float     FLOAT,
+    col_double    DOUBLE,
+    col_decimal   DECIMAL(18, 4),
+    col_bool      BOOLEAN,
+    col_varchar   VARCHAR,
+    col_date      DATE,
+    col_ts        TIMESTAMP
+);
+
+query I
+SELECT count(*) FROM sc.sample.test_ddl_types;
+----
+0
+
+# Introspect the columns – must see all 11 columns
+query I
+SELECT count(*) >= 11
+FROM duckdb_columns()
+WHERE database_name = 'sc'
+  AND schema_name   = 'sample'
+  AND table_name    = 'test_ddl_types';
+----
+true
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE IF NOT EXISTS – must not error when table already exists
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE IF NOT EXISTS sc.sample.test_ddl_basic (id INTEGER, name VARCHAR, score DOUBLE, active BOOLEAN);
+
+# Still exactly one table with that name
+query I
+SELECT count(*) FROM duckdb_tables()
+WHERE database_name = 'sc' AND schema_name = 'sample' AND table_name = 'test_ddl_basic';
+----
+1
+
+# ---------------------------------------------------------------------------
+# CREATE OR REPLACE TABLE – replaces the existing table definition
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE OR REPLACE TABLE sc.sample.test_ddl_replace (x INTEGER);
+
+statement ok
+CREATE OR REPLACE TABLE sc.sample.test_ddl_replace (x INTEGER, y VARCHAR, z DOUBLE);
+
+# Still exactly one table after replace
+query I
+SELECT count(*) FROM duckdb_tables()
+WHERE database_name = 'sc' AND schema_name = 'sample' AND table_name = 'test_ddl_replace';
+----
+1
+
+# The new schema must have 3 columns
+query I
+SELECT count(*) = 3
+FROM duckdb_columns()
+WHERE database_name = 'sc' AND schema_name = 'sample' AND table_name = 'test_ddl_replace';
+----
+true
+
+# ---------------------------------------------------------------------------
+# CREATE TABLE AS SELECT (CTAS) – from an existing Spark table
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE sc.sample.test_ddl_ctas AS
+    SELECT 1 as id, 'John' as name, 'HR' as dept;
+
+# Table must exist
+query I
+SELECT count(*) FROM duckdb_tables()
+WHERE database_name = 'sc' AND schema_name = 'sample' AND table_name = 'test_ddl_ctas';
+----
+1
+
+# Schema must match the projected columns (at least 3 columns)
+query I
+SELECT count(*) >= 3
+FROM duckdb_columns()
+WHERE database_name = 'sc' AND schema_name = 'sample' AND table_name = 'test_ddl_ctas';
+----
+true
+
+# ---------------------------------------------------------------------------
+# Duplicating a table via CTAS from an existing table with data
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE sc.sample.test_ddl_ctas_clone AS
+    SELECT * FROM sc.sample.test_ddl_ctas;
+
+# The copy must have the same row count as the source
+query I
+SELECT (SELECT count(*) FROM sc.sample.test_ddl_ctas_clone)
+     = (SELECT count(*) FROM sc.sample.test_ddl_ctas);
+----
+true
+
+# ---------------------------------------------------------------------------
+# NOT NULL constraint – table with NOT NULL column
+# ---------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE sc.sample.test_ddl_not_null (
+    id   INTEGER NOT NULL,
+    val  VARCHAR NOT NULL
+);
+
+query I
+SELECT count(*) FROM sc.sample.test_ddl_not_null;
+----
+0
+
+# ---------------------------------------------------------------------------
+# Creating a table in a non-existent schema must error
+# ---------------------------------------------------------------------------
+
+statement error
+CREATE TABLE sc.nonexistent_schema_xyz.some_table (id INTEGER);
+----
+
+# ---------------------------------------------------------------------------
+# DROP TABLE – basic drop
+# ---------------------------------------------------------------------------
+
+statement ok
+DROP TABLE sc.sample.test_ddl_basic;
+
+query I
+SELECT count(*) FROM duckdb_tables()
+WHERE database_name = 'sc' AND schema_name = 'sample' AND table_name = 'test_ddl_basic';
+----
+0
+
+# Trying to query a dropped table must error
+statement error
+SELECT * FROM sc.sample.test_ddl_basic;
+----
+
+# ---------------------------------------------------------------------------
+# DROP TABLE IF EXISTS – must not error if table is absent
+# ---------------------------------------------------------------------------
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_basic;
+
+# ---------------------------------------------------------------------------
+# DROP TABLE on non-existent table without IF EXISTS must error
+# ---------------------------------------------------------------------------
+
+statement error
+DROP TABLE sc.sample.nonexistent_table_xyz;
+----
+
+# ---------------------------------------------------------------------------
+# Cleanup remaining test tables
+# ---------------------------------------------------------------------------
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_types;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_ctas;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_ctas_clone;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_not_null;
+
+statement ok
+DROP TABLE IF EXISTS sc.sample.test_ddl_replace;
+
+statement ok
+DETACH sc;
