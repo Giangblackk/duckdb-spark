@@ -6,7 +6,10 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_limit.hpp"
+#include "duckdb/planner/operator/logical_top_n.hpp"
+#include "spark/connect/expressions.pb.h"
 #include "spark_scan_table.hpp"
+#include "spark_utils.hpp"
 #include <cstdint>
 
 namespace duckdb {
@@ -47,11 +50,11 @@ static void OptimizeLimitPushdown(unique_ptr<LogicalOperator> &op) {
 				// Extract offset value if it's a constant
 				if (limit_op.offset_val.Type() == LimitNodeType::CONSTANT_VALUE) {
 					offset_value = static_cast<int32_t>(limit_op.offset_val.GetConstantValue());
-				} else if (limit_op.limit_val.Type() != LimitNodeType::UNSET) { // UNSET means no OFFSET clause found.
+				} else if (limit_op.offset_val.Type() != LimitNodeType::UNSET) { // UNSET means no OFFSET clause found.
 					// Non-constant offset (expression or percentage), UNSUPPORTED => cannot pushdown.
 					can_pushdown = false;
 				}
-
+				// Decide whether to pushdown
 				if (can_pushdown && (limit_value > 0 || offset_value > 0)) {
 					// Store limit and offset value in the SparkScanTableBindData
 					auto &spark_bind_data = get_op.bind_data->Cast<spark::SparkScanTableBindData>();
@@ -81,8 +84,61 @@ static void OptimizeLimitPushdown(unique_ptr<LogicalOperator> &op) {
 	}
 }
 
+static void OptimizeTopNPushDown(unique_ptr<LogicalOperator> &op) {
+	if (op->type == LogicalOperatorType::LOGICAL_TOP_N) {
+		auto &topn_op = op->Cast<LogicalTopN>();
+		// parsing data from TopN Operator
+		vector<::spark::connect::Expression::SortOrder> sort_orders;
+		auto &orders = topn_op.orders;
+		for (const auto &order : orders) {
+			sort_orders.push_back(spark::ConvertDuckDBOrderToSparkSort(order));
+		}
+		int32_t limit_value {static_cast<int32_t>(topn_op.limit)};
+		int32_t offset_value {static_cast<int32_t>(topn_op.offset)};
+
+		// Walk through projections to find the underlying GET operator.
+		// The pattern we're looking for is TOPN -> PROJECTION(s) -> GET.
+		reference<LogicalOperator> child_ref = *op->children[0];
+		while (child_ref.get().type == LogicalOperatorType::LOGICAL_PROJECTION) {
+			if (child_ref.get().children.empty()) {
+				break;
+			}
+			child_ref = *child_ref.get().children[0];
+		}
+		// Find the underlying GET operator.
+		if (child_ref.get().type == LogicalOperatorType::LOGICAL_GET) {
+			auto &get_op = child_ref.get().Cast<LogicalGet>();
+
+			if (get_op.function.name == "spark_scan_table" && get_op.bind_data) {
+				// Store sorting orders, limit and offset values in the SparkScanTableBindData
+				auto &spark_bind_data = get_op.bind_data->Cast<spark::SparkScanTableBindData>();
+				spark_bind_data.limit = limit_value;
+				spark_bind_data.offset = offset_value;
+				spark_bind_data.sort_orders = sort_orders;
+
+				// Remove TopN operator from the plan
+				op = std::move(op->children[0]);
+
+				// Continue optimizing the new root (which was the child)
+				OptimizeTopNPushDown(op);
+				return;
+			}
+		}
+		// Could not pushdown, recurse into children
+		for (auto &child : op->children) {
+			OptimizeTopNPushDown(child);
+		}
+		return;
+	}
+	// For all other operator types, recurse into children
+	for (auto &child : op->children) {
+		OptimizeTopNPushDown(child);
+	}
+}
+
 void OptimizeSparkPlan(duckdb::OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
 	OptimizeLimitPushdown(plan);
+	OptimizeTopNPushDown(plan);
 }
 
 namespace spark {

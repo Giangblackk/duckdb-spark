@@ -6,6 +6,9 @@
 #include "duckdb/common/vector.hpp"
 #include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 #include "duckdb/parser/parsed_data/drop_info.hpp"
+#include "duckdb/planner/bound_result_modifier.hpp"
+#include "spark/connect/expressions.pb.h"
+#include "spark/connect/relations.pb.h"
 #include "spark/connect/types.pb.h"
 
 #include <arrow/record_batch.h>
@@ -58,6 +61,8 @@ LogicalType ConvertSparkToDuckDBType(const ::spark::connect::DataType &dtype);
                                                     const vector<idx_t> &not_nulls = {});
 
 std::shared_ptr<arrow::DataType> ConvertSparkToArrowType(const ::spark::connect::DataType &dtype);
+
+::spark::connect::Expression::SortOrder ConvertDuckDBOrderToSparkSort(const BoundOrderByNode &order);
 
 ::spark::connect::DataType SetSparkType(const LogicalType &type);
 

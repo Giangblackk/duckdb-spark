@@ -3,10 +3,12 @@
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
 #include "duckdb/common/shared_ptr.hpp"
 #include "duckdb/common/unique_ptr.hpp"
+#include "duckdb/common/vector.hpp"
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "spark/connect/expressions.pb.h"
 #include "spark_arrow_reader.hpp"
 #include "spark_client.hpp"
 
@@ -38,6 +40,7 @@ struct SparkScanTableBindData : public ArrowScanFunctionData {
 	vector<unique_ptr<::spark::connect::Expression>> filter_expressions;
 	int32_t limit = -1;
 	int32_t offset = 0;
+	vector<::spark::connect::Expression::SortOrder> sort_orders;
 };
 
 struct SparkScanTableGlobalState : public ArrowScanGlobalState {

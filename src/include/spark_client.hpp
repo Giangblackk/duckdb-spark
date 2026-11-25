@@ -59,6 +59,8 @@ public:
 	                                               std::string &filter_string);
 	::spark::connect::Relation AddLimit(::spark::connect::Relation &input_relation, int32_t limit);
 	::spark::connect::Relation AddOffset(::spark::connect::Relation &input_relation, int32_t offset);
+	::spark::connect::Relation AddSortOrder(::spark::connect::Relation &input_relation,
+	                                        vector<::spark::connect::Expression::SortOrder> sort_orders);
 	::spark::connect::Plan PlanExecuteSQLQuery(const std::string &sql_string);
 	::spark::connect::Plan PlanExecuteSQLCommand(const std::string &sql_string);
 	::spark::connect::Plan PlanCreateTable(const std::string &schema_name, const std::string &table_name,

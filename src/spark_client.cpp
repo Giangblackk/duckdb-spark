@@ -266,6 +266,23 @@ grpc::Status SparkGRPCClient::SetConfigs(const std::map<std::string, std::string
 	return rel;
 }
 
+::spark::connect::Relation SparkGRPCClient::AddSortOrder(::spark::connect::Relation &input_relation,
+                                                         vector<::spark::connect::Expression::SortOrder> sort_orders) {
+	::spark::connect::Relation rel;
+	auto sort = rel.mutable_sort();
+	sort->mutable_input()->CopyFrom(input_relation);
+	auto orders = sort->mutable_order();
+	for (const auto &order : sort_orders) {
+		auto new_element = orders->Add();
+		new_element->CopyFrom(order);
+	}
+	auto rc = rel.mutable_common();
+	rc->set_plan_id(next_plan_id++);
+	rc->set_source_info("");
+
+	return rel;
+}
+
 ::spark::connect::Plan SparkGRPCClient::PlanExecuteSQLQuery(const std::string &sql_string) {
 	::spark::connect::SQL sql_query;
 	sql_query.set_query(sql_string);

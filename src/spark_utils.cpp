@@ -10,7 +10,9 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/parser/parsed_data/create_schema_info.hpp"
+#include "spark/connect/expressions.pb.h"
 #include "spark/connect/types.pb.h"
+#include "spark_expressions.hpp"
 
 #include <arrow/api.h>
 #include <arrow/c/bridge.h>
@@ -310,6 +312,57 @@ std::shared_ptr<arrow::DataType> ConvertSparkToArrowType(const ::spark::connect:
 	// Add structs to DataType
 	spark_dtype.mutable_struct_()->CopyFrom(spark_struct);
 	return spark_dtype;
+}
+
+::spark::connect::Expression::SortOrder ConvertDuckDBOrderToSparkSort(const BoundOrderByNode &order) {
+	auto order_type = order.type;
+	auto null_order_type = order.null_order;
+
+	auto spark_expression = ConvertExpression(*order.expression);
+	::spark::connect::Expression::SortOrder spark_sort;
+	spark_sort.mutable_child()->CopyFrom(*spark_expression);
+
+	::spark::connect::Expression_SortOrder_SortDirection sort_direction;
+	switch (order_type) {
+	case OrderType::INVALID:
+		throw SyntaxException("INVALID OrderType is not allowed");
+		break;
+	case OrderType::ORDER_DEFAULT:
+		sort_direction = ::spark::connect::Expression_SortOrder_SortDirection::
+		    Expression_SortOrder_SortDirection_SORT_DIRECTION_UNSPECIFIED;
+		break;
+	case OrderType::ASCENDING:
+		sort_direction = ::spark::connect::Expression_SortOrder_SortDirection::
+		    Expression_SortOrder_SortDirection_SORT_DIRECTION_ASCENDING;
+		break;
+	case OrderType::DESCENDING:
+		sort_direction = ::spark::connect::Expression_SortOrder_SortDirection::
+		    Expression_SortOrder_SortDirection_SORT_DIRECTION_DESCENDING;
+		break;
+	}
+	spark_sort.set_direction(sort_direction);
+
+	::spark::connect::Expression_SortOrder_NullOrdering null_ordering;
+	switch (null_order_type) {
+
+	case OrderByNullType::INVALID:
+		throw SyntaxException("INVALID OrderByNullType is not allowed");
+		break;
+	case OrderByNullType::ORDER_DEFAULT:
+		null_ordering = ::spark::connect::Expression_SortOrder_NullOrdering::
+		    Expression_SortOrder_NullOrdering_SORT_NULLS_UNSPECIFIED;
+		break;
+	case OrderByNullType::NULLS_FIRST:
+		null_ordering =
+		    ::spark::connect::Expression_SortOrder_NullOrdering::Expression_SortOrder_NullOrdering_SORT_NULLS_FIRST;
+		break;
+	case OrderByNullType::NULLS_LAST:
+		null_ordering =
+		    ::spark::connect::Expression_SortOrder_NullOrdering::Expression_SortOrder_NullOrdering_SORT_NULLS_LAST;
+		break;
+	}
+	spark_sort.set_null_ordering(null_ordering);
+	return spark_sort;
 }
 
 ::spark::connect::DataType SetSparkType(const LogicalType &type) {

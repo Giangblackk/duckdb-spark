@@ -99,6 +99,9 @@ unique_ptr<GlobalTableFunctionState> SparkScanTableFunction::SparkScanTableInitG
 		projection_pushdown_rel = spark_client->AddColumnProjection(read_table_rel, selected_fields);
 	}
 
+	if (bind_data.sort_orders.size() > 0) {
+		projection_pushdown_rel = spark_client->AddSortOrder(projection_pushdown_rel, bind_data.sort_orders);
+	}
 	// Add offset and limit if pushed down, in specific order (order matter here): OFFSET THEN LIMIT
 	if (bind_data.offset > 0) {
 		projection_pushdown_rel = spark_client->AddOffset(projection_pushdown_rel, bind_data.offset);
