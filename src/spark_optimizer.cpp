@@ -136,8 +136,11 @@ static void OptimizeTopNPushDown(unique_ptr<LogicalOperator> &op) {
 	}
 }
 
-void OptimizeSparkPlan(duckdb::OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
+void PreOptimizeSparkPlan(duckdb::OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
 	OptimizeLimitPushdown(plan);
+}
+
+void OptimizeSparkPlan(duckdb::OptimizerExtensionInput &input, unique_ptr<LogicalOperator> &plan) {
 	OptimizeTopNPushDown(plan);
 }
 

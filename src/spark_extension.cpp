@@ -33,6 +33,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	OptimizerExtension optimizer_extension;
 
+	optimizer_extension.pre_optimize_function = PreOptimizeSparkPlan;
 	optimizer_extension.optimize_function = OptimizeSparkPlan;
 
 	config.optimizer_extensions.push_back(std::move(optimizer_extension));
