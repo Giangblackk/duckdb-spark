@@ -712,6 +712,20 @@ jobs:
         run: |
           EXTENSION_NAME=${{ inputs.extension_name }} EXTENSION_CANONICAL=${{ inputs.extension_canonical }} make ${{ inputs.build_type }}
 
+      - name: Dump vcpkg logs
+        run: |
+          for f in local_vcpkg_installation/buildtrees/**/*.log; do
+            echo "::group::$f"; cat "$f"; echo "::endgroup::"
+          done
+        if: failure()
+
+      - name: Upload vcpkg logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-logs
+          path: local_vcpkg_installation/buildtrees/**/*.log
+
       - name: Test Extension
         if: ${{ matrix.osx_build_arch == 'arm64' && inputs.skip_tests == false }}
         env:
